@@ -9,10 +9,8 @@ from scipy import stats #Analysis
 import warnings
 warnings.filterwarnings('ignore')
 
-import gc
 
 import os
-import string
 color = sns.color_palette()
 
 import nltk
@@ -23,10 +21,7 @@ import plotly.offline as py
 # Removed for PyCharm compatibility
 import plotly.graph_objs as go
 
-from sklearn import model_selection, preprocessing, metrics, ensemble, naive_bayes, linear_model
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from sklearn.decomposition import TruncatedSVD
-import lightgbm as lgb
+
 
 pd.options.mode.chained_assignment = None
 pd.options.display.max_columns = 999
@@ -275,10 +270,6 @@ not_stop = ["aren't","couldn't","didn't","doesn't","don't","hadn't","hasn't","ha
 for i in not_stop:
     stops.remove(i)
 
-from sklearn import model_selection, preprocessing, metrics, ensemble, naive_bayes, linear_model
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from sklearn.decomposition import TruncatedSVD
-import lightgbm as lgb
 
 pd.options.mode.chained_assignment = None
 pd.options.display.max_columns = 999
@@ -317,7 +308,7 @@ df_all['review_clean'] = df_all['review'].apply(review_to_words)
 
 """## 3. Model
 
-### 3.1. Deep Learning Model Using N-gram
+### 3.1. Deep Learning Model Using bert
 """
 
 # Make a rating
@@ -376,7 +367,6 @@ test_data_features = save_or_load_bert_features(df_test_full["review"], "../data
 
 from tensorflow.python.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Bidirectional, LSTM, BatchNormalization, Dropout
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 
 # 0. Package
@@ -439,187 +429,7 @@ print('loss_and_metrics : ' + str(loss_and_metrics))
 
 sub_preds_deep = model.predict(test_data_features,batch_size=32)
 
-### 3.2 Lightgbm
-
-
-from sklearn.metrics import roc_auc_score, precision_recall_curve, roc_curve, average_precision_score
-from sklearn.model_selection import KFold
-from lightgbm import LGBMClassifier
-from sklearn.metrics import confusion_matrix
-
-#folds = KFold(n_splits=5, shuffle=True, random_state=546789)
-target = df_train['sentiment']
-feats = ['usefulCount']
-
-sub_preds = np.zeros(df_test.shape[0])
-
-trn_x, val_x, trn_y, val_y = train_test_split(df_train[feats], target, test_size=0.2, random_state=42)
-feature_importance_df = pd.DataFrame()
-
-clf = LGBMClassifier(
-    n_estimators=10000,
-    learning_rate=0.10,
-    num_leaves=30,
-    subsample=0.9,
-    max_depth=7,
-    reg_alpha=0.1,
-    reg_lambda=0.1,
-    min_split_gain=0.01,
-    min_child_weight=2,
-    verbose=100
-)
-
-from lightgbm import early_stopping, log_evaluation
-
-clf.fit(
-    trn_x, trn_y,
-    eval_set=[(trn_x, trn_y), (val_x, val_y)],
-    callbacks=[early_stopping(100), log_evaluation(100)]
-)
-
-sub_preds = clf.predict(df_test[feats])
-
-fold_importance_df = pd.DataFrame()
-fold_importance_df["feature"] = feats
-fold_importance_df["importance"] = clf.feature_importances_
-feature_importance_df = pd.concat([feature_importance_df, fold_importance_df], axis=0)
-
-solution = df_test['sentiment']
-confusion_matrix(y_pred=sub_preds, y_true=solution)
-
-"""We will add variables for higher accuracy."""
-
-len_train = df_train.shape[0]
-df_all = pd.concat([df_train,df_test])
-del df_train, df_test;
-gc.collect()
-
-df_all['date'] = pd.to_datetime(df_all['date'])
-df_all['day'] = df_all['date'].dt.day
-df_all['year'] = df_all['date'].dt.year
-df_all['month'] = df_all['date'].dt.month
-
-from textblob import TextBlob
-from tqdm import tqdm
-reviews = df_all['review']
-
-Predict_Sentiment = []
-for review in tqdm(reviews):
-    blob = TextBlob(review)
-    Predict_Sentiment += [blob.sentiment.polarity]
-df_all["Predict_Sentiment"] = Predict_Sentiment
-df_all.head()
-
-np.corrcoef(df_all["Predict_Sentiment"], df_all["rating"])
-
-np.corrcoef(df_all["Predict_Sentiment"], df_all["sentiment"])
-
-reviews = df_all['review']
-
-Predict_Sentiment = []
-for review in tqdm(reviews):
-    blob = TextBlob(review)
-    Predict_Sentiment += [blob.sentiment.polarity]
-df_all["Predict_Sentiment2"] = Predict_Sentiment
-
-np.corrcoef(df_all["Predict_Sentiment2"], df_all["rating"])
-
-np.corrcoef(df_all["Predict_Sentiment2"], df_all["sentiment"])
-
-df_all['count_sent']=df_all["review"].apply(lambda x: len(re.findall("\n",str(x)))+1)
-
-#Word count in each comment
-df_all['count_word']=df_all["review_clean"].apply(lambda x: len(str(x).split()))
-
-#Unique word count
-df_all['count_unique_word']=df_all["review_clean"].apply(lambda x: len(set(str(x).split())))
-
-#Letter count
-df_all['count_letters']=df_all["review_clean"].apply(lambda x: len(str(x)))
-
-#punctuation count
-df_all["count_punctuations"] = df_all["review"].apply(lambda x: len([c for c in str(x) if c in string.punctuation]))
-
-#upper case words count
-df_all["count_words_upper"] = df_all["review"].apply(lambda x: len([w for w in str(x).split() if w.isupper()]))
-
-#title case words count
-df_all["count_words_title"] = df_all["review"].apply(lambda x: len([w for w in str(x).split() if w.istitle()]))
-
-#Number of stopwords
-df_all["count_stopwords"] = df_all["review"].apply(lambda x: len([w for w in str(x).lower().split() if w in stops]))
-
-#Average length of the words
-df_all["mean_word_len"] = df_all["review_clean"].apply(lambda x: np.mean([len(w) for w in str(x).split()]))
-
-"""We added a season variable."""
-
-df_all['season'] = df_all["month"].apply(lambda x: 1 if ((x>2) & (x<6)) else(2 if (x>5) & (x<9) else (3 if (x>8) & (x<12) else 4)))
-
-"""We normalized useful count."""
-
-df_train = df_all[:len_train]
-df_test = df_all[len_train:]
-
-from sklearn.metrics import roc_auc_score, precision_recall_curve, roc_curve, average_precision_score
-from sklearn.model_selection import KFold
-from lightgbm import LGBMClassifier
-
-#folds = KFold(n_splits=5, shuffle=True, random_state=546789)
-target = df_train['sentiment']
-feats = ['usefulCount','day','year','month','Predict_Sentiment','Predict_Sentiment2', 'count_sent',
- 'count_word', 'count_unique_word', 'count_letters', 'count_punctuations',
- 'count_words_upper', 'count_words_title', 'count_stopwords', 'mean_word_len', 'season']
-
-sub_preds = np.zeros(df_test.shape[0])
-
-trn_x, val_x, trn_y, val_y = train_test_split(df_train[feats], target, test_size=0.2, random_state=42)
-feature_importance_df = pd.DataFrame()
-
-clf = LGBMClassifier(
-        n_estimators=10000,
-        learning_rate=0.10,
-        num_leaves=30,
-        #colsample_bytree=.9,
-        subsample=.9,
-        max_depth=7,
-        reg_alpha=.1,
-        reg_lambda=.1,
-        min_split_gain=.01,
-        min_child_weight=2,
-        silent=-1,
-        verbose=-1,
-        )
-
-clf.fit(trn_x, trn_y,
-        eval_set=[(trn_x, trn_y), (val_x, val_y)],
-        callbacks=[early_stopping(100), log_evaluation(100)])
-
-sub_preds = clf.predict(df_test[feats])
-
-fold_importance_df = pd.DataFrame()
-fold_importance_df["feature"] = feats
-fold_importance_df["importance"] = clf.feature_importances_
-feature_importance_df = pd.concat([feature_importance_df, fold_importance_df], axis=0)
-
-confusion_matrix(y_pred=sub_preds, y_true=solution)
-
-cols = feature_importance_df[["feature", "importance"]].groupby("feature").mean().sort_values(
-    by="importance", ascending=False)[:50].index
-
-best_features = feature_importance_df.loc[feature_importance_df.feature.isin(cols)]
-
-plt.figure(figsize=(14,10))
-sns.barplot(x="importance", y="feature", data=best_features.sort_values(by="importance", ascending=False))
-plt.title('LightGBM Features (avg over folds)')
-plt.tight_layout()
-plt.savefig('lgbm_importances.png')
-
-### 3.3 Dictionary_Sentiment_Analysis
-
-# import dictionary data
-# Removed unused Harvard Dictionary-based sentiment analysis (no longer needed with BERT)
-df_test.head()
+### 3.2 results
 
 def userful_count(data):
     grouped = data.groupby(['condition']).size().reset_index(name='user_size')
@@ -632,10 +442,6 @@ df_test['usefulCount'] = df_test['usefulCount'] / df_test['user_size']
 # Also do "sample" for df_test
 # df_test = df_test.head(len(sub_preds_deep))
 df_test['deep_pred'] = sub_preds_deep
-df_test['machine_pred'] = sub_preds
-
-# Only the first 20 LightGBM prediction results are retained and match the sample mode
-# df_test['machine_pred'] = sub_preds[:len(df_test)]
 
 df_test['total_pred'] = df_test['deep_pred'] * df_test['usefulCount']
 
